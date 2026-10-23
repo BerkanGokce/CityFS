@@ -1,0 +1,6 @@
+CityFS_Codex_Project_Spec.md
+dist/
+node_modules/
+playwright-report/
+test-results/
+package-lock.json
