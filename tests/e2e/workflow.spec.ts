@@ -1,6 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
+test('rejects an oversized file with a specific actionable message', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTestId('file-input').setInputFiles({
+    name: 'large-photo.jpg',
+    mimeType: 'image/jpeg',
+    buffer: Buffer.alloc(3_257_605),
+  });
+  await expect(page.getByRole('status')).toContainText('3.11 MiB');
+  await expect(page.getByRole('status')).toContainText('files up to 8 KiB');
+  await expect(page.getByRole('button', { name: 'File too large' })).toBeDisabled();
+});
+
 test('upload → encode → inspect → export → reset → import → decode', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('Your bytes.')).toBeVisible();

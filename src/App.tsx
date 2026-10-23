@@ -23,6 +23,12 @@ const demoBytes = new TextEncoder().encode(
   'CITYFS / ARCHITECTURE IS DATA\nEvery building in this city stores one byte.\n',
 );
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes.toLocaleString()} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
 export default function App() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [city, setCity] = useState<CityArtifact | null>(null);
@@ -49,7 +55,25 @@ export default function App() {
 
   function showError(error: unknown): void {
     setStatus('error');
-    setMessage(error instanceof Error ? error.message : 'An unexpected error occurred.');
+    setMessage(
+      typeof error === 'string'
+        ? error
+        : error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred.',
+    );
+  }
+
+  function selectSourceFile(file: File): void {
+    setPendingFile(file);
+    if (file.size > MAX_ORIGINAL_BYTES) {
+      showError(
+        `“${file.name}” is ${formatFileSize(file.size)}. CityFS currently supports files up to ${MAX_ORIGINAL_BYTES / 1024} KiB.`,
+      );
+    } else {
+      setMessage('');
+      setStatus('idle');
+    }
   }
 
   async function encode(
@@ -96,11 +120,21 @@ export default function App() {
 
   async function encodePending(): Promise<void> {
     if (!pendingFile) return;
-    await encode(
-      pendingFile.name,
-      pendingFile.type,
-      new Uint8Array(await pendingFile.arrayBuffer()),
-    );
+    if (pendingFile.size > MAX_ORIGINAL_BYTES) {
+      showError(
+        `“${pendingFile.name}” is ${formatFileSize(pendingFile.size)}. CityFS currently supports files up to ${MAX_ORIGINAL_BYTES / 1024} KiB.`,
+      );
+      return;
+    }
+    try {
+      await encode(
+        pendingFile.name,
+        pendingFile.type,
+        new Uint8Array(await pendingFile.arrayBuffer()),
+      );
+    } catch (error) {
+      showError(error);
+    }
   }
 
   async function loadDemo(): Promise<void> {
@@ -221,13 +255,7 @@ export default function App() {
           </div>
           <div className="upload-card">
             <div className="upload-card__index">01 / ENCODE</div>
-            <FileDropzone
-              onFile={(file) => {
-                setPendingFile(file);
-                setMessage('');
-                setStatus('idle');
-              }}
-            />
+            <FileDropzone onFile={selectSourceFile} />
             {pendingFile && (
               <div className="pending-file" data-testid="pending-file">
                 <span>
@@ -237,9 +265,13 @@ export default function App() {
                 <button
                   className="button"
                   onClick={() => void encodePending()}
-                  disabled={status === 'encoding'}
+                  disabled={status === 'encoding' || pendingFile.size > MAX_ORIGINAL_BYTES}
                 >
-                  {status === 'encoding' ? 'Encoding…' : 'Encode city'}
+                  {status === 'encoding'
+                    ? 'Encoding…'
+                    : pendingFile.size > MAX_ORIGINAL_BYTES
+                      ? 'File too large'
+                      : 'Encode city'}
                 </button>
               </div>
             )}
@@ -349,10 +381,16 @@ export default function App() {
         <aside className="sidebar">
           <FileInfoPanel info={info} />
           <BuildingInspector building={inspectedBuilding} index={inspectedIndex} />
-          <FileDropzone compact onFile={(file) => setPendingFile(file)} />
+          <FileDropzone compact onFile={selectSourceFile} />
           {pendingFile && (
-            <button className="button button--wide" onClick={() => void encodePending()}>
-              Encode {pendingFile.name}
+            <button
+              className="button button--wide"
+              disabled={pendingFile.size > MAX_ORIGINAL_BYTES}
+              onClick={() => void encodePending()}
+            >
+              {pendingFile.size > MAX_ORIGINAL_BYTES
+                ? 'Selected file exceeds 8 KiB'
+                : `Encode ${pendingFile.name}`}
             </button>
           )}
         </aside>
